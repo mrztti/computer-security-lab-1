@@ -82,7 +82,6 @@ int main(int argc, char *argv[]) {
 		 		LENGTH - 1, LENGTH - 1, important2);
 
 		user_pass = getpass(prompt);
-		//TODO clean password
 		passwddata = mygetpwnam(user);
 
 		// user -> username
