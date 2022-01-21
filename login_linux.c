@@ -12,21 +12,29 @@
 #include <sys/types.h>
 #include <crypt.h>
 /* Uncomment next line in step 2 */
-/* #include "pwent.h" */
+#include "pwent.h"
 
 #define TRUE 1
 #define FALSE 0
 #define LENGTH 16
 
-void sighandler() {
+#define PASSWORD_AGE_LIMIT 10
+#define PASSWORD_MAX_ATTEMPTS 3
 
-	/* add signalhandling routines here */
-	/* see 'man 2 signal' */
+void doNothing() {}
+
+void sighandler() {
+	signal(SIGABRT, doNothing);
+	signal(SIGFPE, doNothing);
+	signal(SIGILL, doNothing);
+	signal(SIGINT, doNothing);
+	signal(SIGSEGV, doNothing);
+	signal(SIGTERM, doNothing);
 }
 
 int main(int argc, char *argv[]) {
 
-	struct passwd *passwddata; /* this has to be redefined in step 2 */
+	mypwent *passwddata; /* this has to be redefined in step 2 */
 	/* see pwent.h */
 
 	char important1[LENGTH] = "**IMPORTANT 1**";
@@ -52,8 +60,20 @@ int main(int argc, char *argv[]) {
 		fflush(NULL); /* Flush all  output buffers */
 		__fpurge(stdin); /* Purge any data in stdin buffer */
 
-		if (gets(user) == NULL) /* gets() is vulnerable to buffer */
-			exit(0); /*  overflow attacks.  */
+		// if (gets(user) == NULL) /* gets() is vulnerable to buffer */
+		// 	exit(0); /*  overflow attacks.  */
+		// Writing 16 characters then "foo" will result in the variable `important2` being overwritten with "foo"
+
+		if (fgets(user, LENGTH, stdin) == NULL)
+			exit(0);
+
+		user[strlen(user) - 1] = '\0'; /* remove newline */
+
+		if (strlen(user) == 0) {
+			exit(0);
+		}
+
+		fflush(stdin);
 
 		/* check to see if important variable is intact after input of login name - do not remove */
 		printf("Value of variable 'important 1' after input of login name: %*.*s\n",
@@ -62,21 +82,49 @@ int main(int argc, char *argv[]) {
 		 		LENGTH - 1, LENGTH - 1, important2);
 
 		user_pass = getpass(prompt);
-		passwddata = getpwnam(user);
+		//TODO clean password
+		passwddata = mygetpwnam(user);
+
+		// user -> username
+		// user_pass -> psswd
 
 		if (passwddata != NULL) {
 			/* You have to encrypt user_pass for this to work */
 			/* Don't forget to include the salt */
+			char* enc = crypt(user_pass, passwddata->passwd_salt);
 
-			if (!strcmp(user_pass, passwddata->pw_passwd)) {
+			if (passwddata->pwfailed >= PASSWORD_MAX_ATTEMPTS) {
+				printf("User has been locked out of system due to too many attempts.\n");
+				exit(1);
+			}
 
+			if (!strcmp(enc, passwddata->passwd)) {
 				printf(" You're in !\n");
 
-				/*  check UID, see setuid(2) */
-				/*  start a shell, use execve(2) */
+				passwddata->pwfailed = 0;
+				++(passwddata->pwage);
+				mysetpwent(user, passwddata);
+
+				if (passwddata->pwage >= PASSWORD_AGE_LIMIT) {
+					printf("[Warning] Please change your password, it has been used too often!\n");
+				}
+
+				setuid(passwddata->uid);
+
+				char* argv[] = { NULL };
+				char* envp[] = { NULL };
+				execve("/bin/sh", argv, envp);
+
+				exit(0);
+			} else {
+				++(passwddata->pwfailed);
+				mysetpwent(user, passwddata);
+				printf("Login Incorrect [%d / %d consecutive errors]\n", passwddata->pwfailed, PASSWORD_MAX_ATTEMPTS);
+				break;
 
 			}
 		}
+
 		printf("Login Incorrect \n");
 	}
 	return 0;

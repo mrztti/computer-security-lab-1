@@ -1,3 +1,4 @@
 /login_linux
 .vscode/c_cpp_properties.json
 makepass
+passdb
