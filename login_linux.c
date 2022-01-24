@@ -40,7 +40,7 @@ int main(int argc, char *argv[]) {
 }
 
 int login(){
-	
+
 	mypwent *passwddata; /* this has to be redefined in step 2 */
 	/* see pwent.h */
 
@@ -53,9 +53,9 @@ int login(){
 	//char   *c_pass; //you might want to use this variable later...
 	char prompt[] = "password: ";
 	char *user_pass;
-	
+
 	sighandler();
-	
+
 	/* check what important variable contains - do not remove, part of buffer overflow test */
 	printf("Value of variable 'important1' before input of login name: %s\n",
 			important1);
@@ -79,7 +79,7 @@ int login(){
 	}
 	user[strlen(user) - 1] = '\0'; /* remove newline */
 	if (strlen(user) == 0) {
-		return login();
+		return 0;
 	}
 	FLUSH();
 
@@ -119,8 +119,8 @@ int login(){
 			execve("/bin/sh", argv, envp);
 			// Dump login program (execve never returns)
 			// In practice, we would need to specify a way to return to the login state here again
-		} 
-		else 
+		}
+		else
 		{
 			// Increment error counter
 			++(passwddata->pwfailed);
