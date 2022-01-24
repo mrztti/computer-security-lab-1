@@ -20,20 +20,27 @@
 
 #define PASSWORD_AGE_LIMIT 10
 #define PASSWORD_MAX_ATTEMPTS 3
+#define FLUSH() {fflush(stdin);}
+
+int login();
 
 void doNothing() {}
 
 void sighandler() {
 	signal(SIGABRT, doNothing);
 	signal(SIGFPE, doNothing);
-	signal(SIGILL, doNothing);
+	signal(SIGKILL, doNothing);
 	signal(SIGINT, doNothing);
 	signal(SIGSEGV, doNothing);
 	signal(SIGTERM, doNothing);
 }
 
 int main(int argc, char *argv[]) {
+	return login();
+}
 
+int login(){
+	
 	mypwent *passwddata; /* this has to be redefined in step 2 */
 	/* see pwent.h */
 
@@ -46,85 +53,82 @@ int main(int argc, char *argv[]) {
 	//char   *c_pass; //you might want to use this variable later...
 	char prompt[] = "password: ";
 	char *user_pass;
-
+	
 	sighandler();
+	
+	/* check what important variable contains - do not remove, part of buffer overflow test */
+	printf("Value of variable 'important1' before input of login name: %s\n",
+			important1);
+	printf("Value of variable 'important2' before input of login name: %s\n",
+			important2);
 
-	while (TRUE) {
-		/* check what important variable contains - do not remove, part of buffer overflow test */
-		printf("Value of variable 'important1' before input of login name: %s\n",
-				important1);
-		printf("Value of variable 'important2' before input of login name: %s\n",
-				important2);
+	printf("login: ");
+	FLUSH(); /* Flush all output buffers */
+	__fpurge(stdin); /* Purge any data in stdin buffer */
 
-		printf("login: ");
-		fflush(NULL); /* Flush all  output buffers */
+	// if (gets(user) == NULL) /* gets() is vulnerable to buffer */
+	// 	exit(0); /*  overflow attacks.  */
+	// Writing 16 characters then "foo" will result in the variable `important2` being overwritten with "foo"
+
+	if (fgets(user, LENGTH, stdin) == NULL){
+		printf("\nInvalid input\n");
 		__fpurge(stdin); /* Purge any data in stdin buffer */
-
-		// if (gets(user) == NULL) /* gets() is vulnerable to buffer */
-		// 	exit(0); /*  overflow attacks.  */
-		// Writing 16 characters then "foo" will result in the variable `important2` being overwritten with "foo"
-
-		if (fgets(user, LENGTH, stdin) == NULL)
-			exit(0);
-
-		user[strlen(user) - 1] = '\0'; /* remove newline */
-
-		if (strlen(user) == 0) {
-			exit(0);
-		}
-
-		fflush(stdin);
-
-		/* check to see if important variable is intact after input of login name - do not remove */
-		printf("Value of variable 'important 1' after input of login name: %*.*s\n",
-				LENGTH - 1, LENGTH - 1, important1);
-		printf("Value of variable 'important 2' after input of login name: %*.*s\n",
-		 		LENGTH - 1, LENGTH - 1, important2);
-
-		user_pass = getpass(prompt);
-		passwddata = mygetpwnam(user);
-
-		// user -> username
-		// user_pass -> psswd
-
-		if (passwddata != NULL) {
-			/* You have to encrypt user_pass for this to work */
-			/* Don't forget to include the salt */
-			char* enc = crypt(user_pass, passwddata->passwd_salt);
-
-			if (passwddata->pwfailed >= PASSWORD_MAX_ATTEMPTS) {
-				printf("User has been locked out of system due to too many attempts.\n");
-				exit(1);
-			}
-
-			if (!strcmp(enc, passwddata->passwd)) {
-				printf(" You're in !\n");
-
-				passwddata->pwfailed = 0;
-				++(passwddata->pwage);
-				mysetpwent(user, passwddata);
-
-				if (passwddata->pwage >= PASSWORD_AGE_LIMIT) {
-					printf("[Warning] Please change your password, it has been used too often!\n");
-				}
-
-				setuid(passwddata->uid);
-
-				char* argv[] = { NULL };
-				char* envp[] = { NULL };
-				execve("/bin/sh", argv, envp);
-
-				exit(0);
-			} else {
-				++(passwddata->pwfailed);
-				mysetpwent(user, passwddata);
-				printf("Login Incorrect [%d / %d consecutive errors]\n", passwddata->pwfailed, PASSWORD_MAX_ATTEMPTS);
-				break;
-
-			}
-		}
-
-		printf("Login Incorrect \n");
+		clearerr(stdin);
+		FLUSH();
+		return login();
 	}
-	return 0;
+	user[strlen(user) - 1] = '\0'; /* remove newline */
+	if (strlen(user) == 0) {
+		return login();
+	}
+	FLUSH();
+
+	/* check to see if important variable is intact after input of login name - do not remove */
+	printf("Value of variable 'important 1' after input of login name: %*.*s\n",
+			LENGTH - 1, LENGTH - 1, important1);
+	printf("Value of variable 'important 2' after input of login name: %*.*s\n",
+			LENGTH - 1, LENGTH - 1, important2);
+
+	user_pass = getpass(prompt);
+	passwddata = mygetpwnam(user);
+
+	if (passwddata != NULL) {
+		// Lockout user if too many attempts
+		if (passwddata->pwfailed >= PASSWORD_MAX_ATTEMPTS) {
+			printf("User has been locked out of system due to too many attempts.\n");
+			return login();
+		}
+
+		// Encrypt given pwd with the given salt and compare
+		char* enc = crypt(user_pass, passwddata->passwd_salt);
+		if (!strcmp(enc, passwddata->passwd)) {
+			printf("--= USER LOGGED IN =--\n");
+			passwddata->pwfailed = 0;
+
+			// Manage password age
+			++(passwddata->pwage);
+			mysetpwent(user, passwddata);
+			if (passwddata->pwage >= PASSWORD_AGE_LIMIT) {
+				printf("[Warning] Please change your password, it has been used too often!\n");
+			}
+
+			// Open new bash session
+			setuid(passwddata->uid);
+			char* argv[] = { NULL };
+			char* envp[] = { NULL };
+			execve("/bin/sh", argv, envp);
+			// Dump login program (execve never returns)
+			// In practice, we would need to specify a way to return to the login state here again
+		} 
+		else 
+		{
+			// Increment error counter
+			++(passwddata->pwfailed);
+			mysetpwent(user, passwddata);
+			printf("Login Incorrect [%d / %d consecutive errors]\n", passwddata->pwfailed, PASSWORD_MAX_ATTEMPTS);
+			return login();
+		}
+	}
+	printf("Login Incorrect \n");
+	return login();
 }
