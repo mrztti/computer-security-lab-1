@@ -112,13 +112,18 @@ int login(){
 				printf("[Warning] Please change your password, it has been used too often!\n");
 			}
 
-			// Open new bash session
-			setuid(passwddata->uid);
-			char* argv[] = { NULL };
-			char* envp[] = { NULL };
-			execve("/bin/sh", argv, envp);
-			// Dump login program (execve never returns)
-			// In practice, we would need to specify a way to return to the login state here again
+            // Try to set UID
+			const int uidSuccess = setuid(passwddata->uid);
+
+            if (uidSuccess == 0) {
+                // OK, the UID has been set, open new bash session
+                char* argv[] = { NULL };
+                char* envp[] = { NULL };
+                execve("/bin/sh", argv, envp);
+            } else {
+                printf("[Warning] Failed to open a shell as %s. Are you allowed to do so?\n", passwddata->pwname);
+                return login();
+            }
 		}
 		else
 		{
