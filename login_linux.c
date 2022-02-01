@@ -20,12 +20,13 @@
 
 #define PASSWORD_AGE_LIMIT 10
 #define PASSWORD_MAX_ATTEMPTS 3
+#define MAXIMUM_LOGIN_ATTEMPTS 10
 #define FLUSH() {fflush(stdin);}
 
 int login();
-
 void doNothing() {}
 
+// Catch all int. signals
 void sighandler() {
 	signal(SIGABRT, doNothing);
 	signal(SIGFPE, doNothing);
@@ -37,8 +38,10 @@ void sighandler() {
     signal(SIGTSTP, doNothing);
 }
 
+/* MAIN */
 int main(int argc, char *argv[]) {
-	return login(10);
+	// login is recursive with base case success or faulty exit (machine exits/turns off).
+	return login(MAXIMUM_LOGIN_ATTEMPTS);
 }
 
 int login(int loginCount) {
@@ -47,16 +50,10 @@ int login(int loginCount) {
 		exit(1);
 	}
 
-	mypwent *passwddata; /* this has to be redefined in step 2 */
-	/* see pwent.h */
-
+	mypwent *passwddata; 
 	char important1[LENGTH] = "**IMPORTANT 1**";
-
 	char user[LENGTH];
-
 	char important2[LENGTH] = "**IMPORTANT 2**";
-
-	//char   *c_pass; //you might want to use this variable later...
 	char prompt[] = "password: ";
 	char *user_pass;
 
@@ -72,14 +69,12 @@ int login(int loginCount) {
 	FLUSH(); /* Flush all output buffers */
 	__fpurge(stdin); /* Purge any data in stdin buffer */
 
-	// if (gets(user) == NULL) /* gets() is vulnerable to buffer */
-	// 	exit(0); /*  overflow attacks.  */
 	// Writing 16 characters then "foo" will result in the variable `important2` being overwritten with "foo"
 
 	if (fgets(user, LENGTH, stdin) == NULL){
 		printf("\nInvalid input\n");
-		__fpurge(stdin); /* Purge any data in stdin buffer */
-		clearerr(stdin);
+		__fpurge(stdin); // Purge any data in stdin buffer
+		clearerr(stdin); // Reset error bit
 		FLUSH();
 		return login(loginCount - 1);
 	}
