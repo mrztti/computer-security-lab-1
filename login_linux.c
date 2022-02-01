@@ -33,13 +33,19 @@ void sighandler() {
 	signal(SIGINT, doNothing);
 	signal(SIGSEGV, doNothing);
 	signal(SIGTERM, doNothing);
+	signal(SIGQUIT, doNothing);
+    signal(SIGTSTP, doNothing);
 }
 
 int main(int argc, char *argv[]) {
-	return login();
+	return login(10);
 }
 
-int login(){
+int login(int loginCount) {
+	if (!loginCount) {
+		printf("Too many login attempts.\n");
+		exit(1);
+	}
 
 	mypwent *passwddata; /* this has to be redefined in step 2 */
 	/* see pwent.h */
@@ -75,8 +81,10 @@ int login(){
 		__fpurge(stdin); /* Purge any data in stdin buffer */
 		clearerr(stdin);
 		FLUSH();
-		return login();
+		return login(loginCount - 1);
 	}
+	printf("%d\n", strlen(user));
+	printf("%s\n", user);
 	user[strlen(user) - 1] = '\0'; /* remove newline */
 	if (strlen(user) == 0) {
 		return 0;
@@ -96,7 +104,7 @@ int login(){
 		// Lockout user if too many attempts
 		if (passwddata->pwfailed >= PASSWORD_MAX_ATTEMPTS) {
 			printf("User has been locked out of system due to too many attempts.\n");
-			return login();
+			return login(loginCount - 1);
 		}
 
 		// Encrypt given pwd with the given salt and compare
@@ -107,7 +115,11 @@ int login(){
 
 			// Manage password age
 			++(passwddata->pwage);
-			mysetpwent(user, passwddata);
+			if (mysetpwent(user, passwddata)) {
+				printf("[Error] Couldn't update password age\n");
+				exit(1);
+			}
+
 			if (passwddata->pwage >= PASSWORD_AGE_LIMIT) {
 				printf("[Warning] Please change your password, it has been used too often!\n");
 			}
@@ -119,21 +131,29 @@ int login(){
                 // OK, the UID has been set, open new bash session
                 char* argv[] = { NULL };
                 char* envp[] = { NULL };
-                execve("/bin/sh", argv, envp);
+                if (execve("/bin/sh", argv, envp)) {
+					printf("[Error] Failed to open a shell\n");
+					exit(1);
+				}
             } else {
-                printf("[Warning] Failed to open a shell as %s. Are you allowed to do so?\n", passwddata->pwname);
-                return login();
+                printf("[Error] Failed to open a shell as %s. Are you allowed to do so?\n", passwddata->pwname);
+                exit(1);
             }
 		}
 		else
 		{
 			// Increment error counter
 			++(passwddata->pwfailed);
-			mysetpwent(user, passwddata);
+
+			if (mysetpwent(user, passwddata)) {
+				printf("[Error] Couldn't increment error counter\n");
+				exit(1);
+			}
+
 			printf("Login Incorrect [%d / %d consecutive errors]\n", passwddata->pwfailed, PASSWORD_MAX_ATTEMPTS);
-			return login();
+			return login(loginCount - 1);
 		}
 	}
 	printf("Login Incorrect \n");
-	return login();
+	return login(loginCount	- 1);
 }
