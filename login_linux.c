@@ -83,12 +83,8 @@ int login(int loginCount) {
 		FLUSH();
 		return login(loginCount - 1);
 	}
-	printf("%d\n", strlen(user));
-	printf("%s\n", user);
+
 	user[strlen(user) - 1] = '\0'; /* remove newline */
-	if (strlen(user) == 0) {
-		return 0;
-	}
 	FLUSH();
 
 	/* check to see if important variable is intact after input of login name - do not remove */
